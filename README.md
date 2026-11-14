@@ -1,29 +1,41 @@
-# Backend da agenda compartilhada
+# Backend da agenda — Firebase Realtime Database
 
-API Node.js para hospedagem serverless, com banco PostgreSQL persistente. As reservas não ficam na memória da função nem no navegador. Os registros do caderno são inseridos uma única vez; uma exclusão não volta após novo deploy.
+API Node.js para Vercel. Salva reservas online em `salon/bookings` no Realtime Database. A profissional consulta a mesma agenda em qualquer aparelho. PostgreSQL e `DATABASE_URL` não são utilizados.
 
-## Publicar
+Banco: `https://salao-884a5-default-rtdb.firebaseio.com`
 
-1. Importe este repositório como projeto **Other**, com **Root Directory vazio**. A pasta `api/` já fica na raiz deste repositório. Sem comando de build ou diretório de saída personalizado.
-2. Na hospedagem, conecte um banco PostgreSQL (por exemplo, Neon pelo Marketplace/Storage). Salve a conexão **pooled** na variável secreta `DATABASE_URL`. Use os parâmetros TLS fornecidos pelo serviço.
-3. Configure `FRONTEND_ORIGINS` com a origem HTTPS exata do frontend, sem barra no final. Para múltiplas origens, separe por vírgula. Não use `*`.
-4. No computador, rode `npm install` e `npm run password`. Crie sua senha de pelo menos 12 caracteres e salve o hash gerado na variável secreta `ADMIN_PASSWORD_HASH`. Não publique sua senha nem sua conexão do banco no Git.
-5. Publique. As tabelas e a agenda do caderno são criadas automaticamente no primeiro acesso. `GET /api/health` deve retornar `ok: true` com `storage: postgresql`.
-6. No frontend, preencha `window.AGENDA_API_URL` em `config.js` com a URL HTTPS deste backend e publique o frontend. O painel busca atualizações a cada 5 segundos enquanto está aberto.
+Frontend: `https://agendamentos-amber-xi.vercel.app`
 
-O envio ao GitHub não cria o banco nem as variáveis de ambiente. Sem `DATABASE_URL`, a API retorna 503, sem simular uma reserva salva.
+Backend: `https://salaoback.vercel.app`
+
+## Configuração necessária na Vercel
+
+No projeto **salaoback**, abra Settings → Environment Variables e configure:
+
+- `FIREBASE_DATABASE_URL`: `https://salao-884a5-default-rtdb.firebaseio.com` (já é o padrão no código).
+- `FIREBASE_SERVICE_ACCOUNT_JSON`: conteúdo completo do JSON da conta de serviço, exclusivamente como variável secreta do backend.
+- `FRONTEND_ORIGINS`: `https://agendamentos-amber-xi.vercel.app` (sem barra final; já é o padrão).
+- `ADMIN_PASSWORD`: senha administrativa escolhida por você, de 12 a 128 caracteres, exclusivamente nas variáveis secretas do backend. Somente o hash será gravado no banco. Como alternativa, use `ADMIN_PASSWORD_HASH` gerado com `npm run password`.
+
+Para obter a credencial Firebase: Console Firebase → projeto **salao-884a5** → Configurações do projeto → Contas de serviço → Gerar nova chave privada. Guarde esse JSON em local seguro e preencha a variável secreta da Vercel. Não envie o arquivo ao GitHub, ao frontend ou ao chat. Depois de configurar as variáveis, faça um novo deploy.
+
+Em Realtime Database → Regras, publique o conteúdo de `database.rules.json`: leitura e escrita diretas bloqueadas. O backend usa Firebase Admin autenticado; não é necessário deixar o banco público.
+
+`GET /api/health` retorna `ok: true` e `storage: firebase-realtime-database` quando a credencial estiver funcionando. Sem credencial, a API retorna 503 e não confirma reservas falsas.
+
+## Dados
+
+- `salon/bookings`: nome, telefone, serviço, preço, data, horário e confirmação.
+- `salon/sessions`: hashes de sessões administrativas com expiração.
+- `salon/password_hash`: hash da senha, nunca a senha em texto.
+- `salon/rates`: contadores de limite de requisições.
+
+Os registros do caderno são inseridos uma única vez. Excluir uma reserva não a recria no deploy seguinte. Transações Firebase protegem o limite de dois atendimentos e impedem duas reservas na mesma vaga. A API pública retorna somente disponibilidade; nomes e telefones exigem sessão administrativa.
 
 ## Desenvolvimento e testes
 
-Node.js 24. Copie `.env.example` para `.env` e preencha os valores localmente. `npm start` inicia na porta 3001 e `npm test` usa PostgreSQL embutido isolado, sem clientes ou senhas reais. O teste cobre dois clientes independentes, consulta administrativa, concorrência, limite diário, persistência, cancelamento, origem, sessão e senha.
+Node.js 24. `npm install`; copie `.env.example` para `.env` e configure os valores localmente. `npm start` inicia a API local na porta 3001.
 
-## API
+Para testes, inicie o emulador Realtime Database em `127.0.0.1:9000` usando um projeto de demonstração `demo-salao`, configure `FIREBASE_DATABASE_EMULATOR_HOST=127.0.0.1:9000` e execute `npm test`. O teste se recusa a usar um host de produção. Não configure a variável de emulador na Vercel.
 
-- `GET /api/availability?month=2026-12`: somente horários ocupados, sem nomes.
-- `POST /api/bookings`: reserva validada no servidor, com preço e capacidade calculados pelo servidor.
-- `POST /api/admin/login`: senha administrativa; retorna sessão de 8 horas.
-- `GET /api/admin/bookings`: lista protegida por `Authorization: Bearer TOKEN`.
-- `DELETE /api/admin/bookings/ID`: exclusão protegida, incluindo registros do caderno.
-- `POST /api/admin/password` e `/api/admin/logout`: troca de senha e encerramento de sessão.
-
-O frontend não tem permissão de acesso direto ao banco. A sessão de login fica em sessionStorage; clientes e reservas ficam exclusivamente no PostgreSQL. Dados antigos gravados em navegadores não são importados automaticamente. O período de atendimento termina em 27/12/2026.
+O frontend usa `config.js` com a URL pública deste backend e atualiza a administração a cada 5 segundos. Dados antigos salvos em navegadores não são importados automaticamente. O atendimento termina em 27/12/2026.

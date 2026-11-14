@@ -1,18 +1,18 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {PGlite} from '@electric-sql/pglite';
-import {createDatabase} from '../lib/database.mjs';
+import {initializeApp,deleteApp} from 'firebase-admin/app';
+import {getDatabase} from 'firebase-admin/database';
+import {randomUUID} from 'node:crypto';
+import {createDatabase} from '../lib/firebase-database.mjs';
 import {createApp} from '../lib/app.mjs';
 import {passwordHash} from '../lib/security.mjs';
 
-test('shared PostgreSQL: independent clients, auth, conflicts, deletion and restart',async()=>{
-  const pg=new PGlite();
-  let tail=Promise.resolve();
-  async function acquire(){let release;const next=new Promise(r=>release=r),previous=tail;tail=next;await previous;return release;}
-  const query=async(sql,args)=>sql.includes(';')&&!args?(await pg.exec(sql)).at(-1):pg.query(sql,args);
-  const pool={async connect(){const release=await acquire();return {query,release};},async query(sql,args){const release=await acquire();try{return await query(sql,args);}finally{release();}}};
+test('shared Firebase: independent clients, auth, conflicts, deletion and restart',async()=>{
+  if(!/^127\.0\.0\.1:\d+$/.test(process.env.FIREBASE_DATABASE_EMULATOR_HOST||''))throw new Error('Tests require local FIREBASE_DATABASE_EMULATOR_HOST; production is never used.');
+  const firebase=initializeApp({projectId:'demo-salao',databaseURL:'https://demo-salao-default-rtdb.firebaseio.com'},'test-'+randomUUID());
+  const reference=getDatabase(firebase).ref('test-'+randomUUID());
   const env={FRONTEND_ORIGINS:'https://salon.example',ADMIN_PASSWORD_HASH:await passwordHash('test-password-12345')};
-  const makeApp=()=>createApp({db:createDatabase(pool),env,now:()=>({date:'2026-11-14',minutes:0})});
+  const makeApp=()=>createApp({db:createDatabase(reference),env,now:()=>({date:'2026-11-14',minutes:0})});
   const adminApp=makeApp(),customerApp=makeApp();let ip=0;
   const req=async(app,path,{method='GET',body,token,origin='https://salon.example',address}={})=>app(new Request('https://backend.example'+path,{method,headers:{Origin:origin,'Content-Type':'application/json','x-forwarded-for':address||'test-'+(++ip),...(token?{Authorization:'Bearer '+token}:{})},...(body?{body:JSON.stringify(body)}:{})}));
   try{
@@ -45,5 +45,5 @@ test('shared PostgreSQL: independent clients, auth, conflicts, deletion and rest
     await req(adminApp,'/api/admin/logout',{method:'POST',body:{},token});assert.equal((await req(adminApp,'/api/admin/bookings',{token})).status,401);
     for(let i=0;i<5;i++)assert.equal((await req(adminApp,'/api/admin/login',{method:'POST',body:{password:'wrong'},address:'limited-ip'})).status,401);
     assert.equal((await req(adminApp,'/api/admin/login',{method:'POST',body:{password:'wrong'},address:'limited-ip'})).status,429);
-  }finally{await pg.close();}
+  }finally{await reference.remove();await deleteApp(firebase); }
 });
