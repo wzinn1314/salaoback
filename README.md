@@ -1,6 +1,6 @@
 # Backend da agenda — Firebase Realtime Database
 
-API Node.js para Vercel. Salva reservas online em `salon/bookings` no Realtime Database. A profissional consulta a mesma agenda em qualquer aparelho. PostgreSQL e `DATABASE_URL` não são utilizados.
+API Express para Vercel, com entrada unica index.js na raiz. Salva reservas online em `salon/bookings` no Realtime Database. A profissional consulta a mesma agenda em qualquer aparelho. PostgreSQL e `DATABASE_URL` não são utilizados.
 
 Banco: `https://salao-884a5-default-rtdb.firebaseio.com`
 
@@ -9,6 +9,8 @@ Frontend: `https://agendamentos-amber-xi.vercel.app`
 Backend: `https://salaoback.vercel.app`
 
 ## Configuração necessária na Vercel
+
+Na hospedagem, use Framework Preset **Express**, Root Directory vazio e sem Output Directory personalizado. A raiz `/` e `/api/version` respondem sem credenciais e identificam `firebase-express-v3`. O status do banco fica em `/api/health`.
 
 No projeto **salaoback**, abra Settings → Environment Variables e configure:
 
