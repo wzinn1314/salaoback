@@ -1,21 +1,29 @@
-# Jaiane Neves - Backend
+# Backend da agenda compartilhada
 
-API de agendamento e autenticacao administrativa. Frontend separado em https://github.com/wzinn1314/salaofront.
+API Node.js para hospedagem serverless, com banco PostgreSQL persistente. As reservas não ficam na memória da função nem no navegador. Os registros do caderno são inseridos uma única vez; uma exclusão não volta após novo deploy.
 
-## Desenvolvimento local
+## Publicar
 
-Requer Node.js 24. Execute npm start. API em http://localhost:5500/api, verificacao em /api/health. Sem dependencias externas.
+1. Importe este repositório como projeto **Other**, com **Root Directory vazio**. A pasta `api/` já fica na raiz deste repositório. Sem comando de build ou diretório de saída personalizado.
+2. Na hospedagem, conecte um banco PostgreSQL (por exemplo, Neon pelo Marketplace/Storage). Salve a conexão **pooled** na variável secreta `DATABASE_URL`. Use os parâmetros TLS fornecidos pelo serviço.
+3. Configure `FRONTEND_ORIGINS` com a origem HTTPS exata do frontend, sem barra no final. Para múltiplas origens, separe por vírgula. Não use `*`.
+4. No computador, rode `npm install` e `npm run password`. Crie sua senha de pelo menos 12 caracteres e salve o hash gerado na variável secreta `ADMIN_PASSWORD_HASH`. Não publique sua senha nem sua conexão do banco no Git.
+5. Publique. As tabelas e a agenda do caderno são criadas automaticamente no primeiro acesso. `GET /api/health` deve retornar `ok: true` com `storage: postgresql`.
+6. No frontend, preencha `window.AGENDA_API_URL` em `config.js` com a URL HTTPS deste backend e publique o frontend. O painel busca atualizações a cada 5 segundos enquanto está aberto.
 
-SQLite e credenciais locais ficam em .local/, fora do Git. Uma instalacao nova gera a senha inicial no terminal. O banco e a senha do computador original nao sao incluidos.
+O envio ao GitHub não cria o banco nem as variáveis de ambiente. Sem `DATABASE_URL`, a API retorna 503, sem simular uma reserva salva.
 
-npm test verifica autenticacao, privacidade, horarios, conflitos, capacidade e cancelamento.
+## Desenvolvimento e testes
 
-## Producao
+Node.js 24. Copie `.env.example` para `.env` e preencha os valores localmente. `npm start` inicia na porta 3001 e `npm test` usa PostgreSQL embutido isolado, sem clientes ou senhas reais. O teste cobre dois clientes independentes, consulta administrativa, concorrência, limite diário, persistência, cancelamento, origem, sessão e senha.
 
-worker.mjs e um Cloudflare Worker. Configure D1 com binding DB, aplique as migracoes de drizzle/ e configure ADMIN_BOOTSTRAP_HASH como segredo no formato salt:hash gerado por passwordHash. A configuracao de hospedagem ainda precisa dos identificadores da sua conta.
+## API
 
-dev-server.mjs e exclusivo para desenvolvimento: escuta apenas 127.0.0.1 e adapta cookies para HTTP. Nao e servidor de producao para Render ou Vercel. Nao use SQLite efemero como banco de funcoes serverless.
+- `GET /api/availability?month=2026-12`: somente horários ocupados, sem nomes.
+- `POST /api/bookings`: reserva validada no servidor, com preço e capacidade calculados pelo servidor.
+- `POST /api/admin/login`: senha administrativa; retorna sessão de 8 horas.
+- `GET /api/admin/bookings`: lista protegida por `Authorization: Bearer TOKEN`.
+- `DELETE /api/admin/bookings/ID`: exclusão protegida, incluindo registros do caderno.
+- `POST /api/admin/password` e `/api/admin/logout`: troca de senha e encerramento de sessão.
 
-## Frontend
-
-As paginas chamam /api/* no dominio do frontend. Apos hospedar esta API, configure um proxy de mesma origem na Vercel que encaminhe requisicoes e cookies. O backend valida Origin: o proxy deve validar a origem do frontend antes de encaminhar a origem do backend. O envio para GitHub nao publica a API automaticamente.
+O frontend não tem permissão de acesso direto ao banco. A sessão de login fica em sessionStorage; clientes e reservas ficam exclusivamente no PostgreSQL. Dados antigos gravados em navegadores não são importados automaticamente. O período de atendimento termina em 27/12/2026.
